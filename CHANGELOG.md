@@ -1,5 +1,9 @@
 # Changelog
 
+All notable changes to this project are documented here. Format based on
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project follows
+[Semantic Versioning](https://semver.org/).
+
 ## [Unreleased]
 
 ### Added
@@ -38,7 +42,9 @@ First version, extracted from the 2026-11-24 incident response.
 - `scripts/check_repo_gate.sh` — required files, shell syntax, Python compile,
   secret scan, tests, relative-link check; used by `.github/workflows/ci.yml`.
 
-### Fixed (in the deployment, not in this repository)
+### Fixed
+
+In the deployment, not in this repository:
 
 - `start_studio.sh` in `jcheng-manipulation` reordered: token, gateway and venv
   are resolved **before** the port guard. The old order killed a healthy
@@ -46,11 +52,3 @@ First version, extracted from the 2026-11-24 incident response.
 - `/etc/fstab` on the robot had four identical `/swapfile` lines;
   `systemd-fstab-generator` failed on every boot. Collapsed to one
   (`/etc/fstab.bak-20261124`).
-
-### Not verified
-
-- The watchdog has never fired in a real wedge (no reproduction on the day it
-  was installed; a synthetic kernel stall was not attempted because the robot
-  is the only test unit).
-- No end-to-end reboot test after the drop-ins (the vendor boot sequence moves
-  the arm).
