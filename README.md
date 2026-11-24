@@ -114,6 +114,7 @@ bash scripts/check_repo_gate.sh
 ## 6. 目录
 
 ```text
+capability.yaml  组织准入清单：layer ops、无硬件访问、motion_authority: none
 robot/    机器人侧：健康巡检（Python，仅标准库）、service/timer、安装器
 studio/   笔记本侧：Studio 后端看护、systemd user 单元、安装器
 docs/     事故记录、架构、运维手册、验证记录

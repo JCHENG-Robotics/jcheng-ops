@@ -1,0 +1,96 @@
+# Capability manifest for the organization's admission check.
+# This repository is a cross-layer operations repository: it observes published
+# HTTP health endpoints and restarts systemd units. It never commands motion,
+# and no runtime repository imports it (JCHENG-Robotics/.github
+# docs/repo-taxonomy.md, layer OPS).
+name: jcheng-ops
+version: 0.1.0
+layer: ops
+status: deployed
+
+runtime_roles:
+  robot-health:
+    host: Raspberry Pi 5 (8 GB), systemd, root oneshot timer every 30 s
+    responsibilities:
+      - probe both gateway /health endpoints (8765 read-only, 8766 pose)
+      - probe the local sshd banner on 127.0.0.1:22
+      - read /proc/meminfo and log the top resident processes under pressure
+      - restart a gateway or sshd after three consecutive failed probes
+      - write /run/armpi-ops/status.json for the operator
+    forbidden:
+      - publishing to ROS topics or joining the DDS graph
+      - opening /dev/video*, serial, CAN or servo devices
+      - sending motion commands or touching the control lease
+      - restarting a gateway while the other gateway reports motion active
+  robot-watchdog:
+    host: Raspberry Pi 5, systemd PID 1, BCM2835 /dev/watchdog0
+    responsibilities:
+      - keep the hardware watchdog armed at its fixed 15 s timeout
+      - ping it every 7.5 s so a user-space stall reboots the board
+    forbidden:
+      - disarming or extending the watchdog without an explicit operator action
+  studio-watchdog:
+    host: operator laptop, systemd user manager
+    responsibilities:
+      - GET /api/health on the Studio backend every 30 s
+      - restart the backend after two consecutive failures, but only when the
+        robot gateway answers
+      - leave a running backend alone while the robot is unreachable
+    forbidden:
+      - killing a process on port 8000 whose cmdline is not
+        app.main:create_app
+      - restarting the backend while the robot gateway is unreachable
+      - issuing motion commands or acquiring a control lease
+
+hardware_access:
+  kind: none
+  detail: >-
+    The guards read the robot's HTTP health endpoints and /proc/meminfo, and
+    restart systemd units. They do not open cameras, serial, CAN or servo
+    devices, do not join the vendor DDS domain, and do not own any device.
+
+motion_authority: none
+control_path: none
+fail_closed: true
+
+topics:
+  subscribes: []
+  publishes: []
+
+contracts:
+  status: not_applicable
+  note: >-
+    No cross-repository contract is defined or consumed. The guards call the
+    existing gateway HTTP /health surface and the Studio /api/health endpoint;
+    both are documented in docs/ARCHITECTURE.md.
+
+safety:
+  - No motion command is produced or consumed.
+  - A gateway is restarted only after three consecutive failed probes and only
+    while the other gateway reports motion_state idle or disabled.
+  - If both gateways are down the motion state is unknowable; a restart happens
+    only on the third consecutive failure.
+  - sshd is restarted only after three consecutive local banner failures
+    (about 90 s).
+  - The Studio watchdog never kills a backend while the robot gateway is
+    unreachable.
+  - Health checks run with OOMScoreAdjust=-500 and Nice=5 so they survive the
+    memory pressure they report.
+  - A hardware-watchdog reboot runs the vendor boot sequence, which moves the
+    arm; keep the workspace clear when the robot is unattended.
+  - The guards are not an emergency stop and do not read the arm's physical
+    state.
+
+verification:
+  unit_tests: 5
+  repo_gate: passed (scripts/check_repo_gate.sh, required check ops-gate)
+  robot_install: >-
+    passed 2026-11-24 (RuntimeWatchdogUSec=15s, PID 1 holds /dev/watchdog0,
+    health timer active, status summary=ok, actions=[])
+  laptop_install: >-
+    passed 2026-11-24 (user unit enabled+active; restart and refuse-restart
+    branches verified with --dry-run)
+  not_verified:
+    - the watchdog has never fired in a real user-space wedge
+    - no reboot test after the systemd drop-ins (the vendor boot moves the arm)
+    - the ~4 GB Python process behind the 2026-11-24 OOM is unidentified
