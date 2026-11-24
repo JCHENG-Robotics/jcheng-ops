@@ -21,6 +21,7 @@ README.md
 VERSION
 CHANGELOG.md
 LICENSE-REVIEW.md
+capability.yaml
 robot/armpi-ops-health
 robot/armpi-ops-health.service
 robot/armpi-ops-health.timer

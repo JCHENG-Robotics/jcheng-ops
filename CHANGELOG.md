@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `capability.yaml` — the organization admission manifest: layer `ops`
+  (cross-layer, not imported by any runtime repository), no hardware access,
+  `motion_authority: none`, the three runtime roles and their forbidden
+  actions, plus the verification record and the three open items.
+
 ## [0.1.0] — 2026-11-24
 
 First version, extracted from the 2026-11-24 incident response.
