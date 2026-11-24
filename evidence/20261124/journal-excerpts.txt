@@ -1,0 +1,36 @@
+# Journal excerpts, robot boot ending 2026-11-24 09:53 HKT (previous boot).
+# Sanitized: no tokens, no keys. Times are the robot's local clock.
+
+Nov 24 09:20:40 raspberrypi kernel: containerd invoked oom-killer: gfp_mask=0x140cca(GFP_HIGHUSER_MOVABLE|__GFP_COMP), order=0, oom_score_adj=-999
+Nov 24 09:20:49 raspberrypi kernel:  oom_kill_process+0x140/0x2e8
+Nov 24 09:20:53 raspberrypi kernel: [  pid  ]   uid  tgid total_vm      rss pgtables_bytes swapents oom_score_adj name
+Nov 24 09:20:54 raspberrypi kernel: [   3054]  1000  3054   776245   251486  4128768   165582             0 python3
+Nov 24 09:20:54 raspberrypi kernel: [   3775]  1000  3775   727469   233048  3489792   130699             0 python3
+Nov 24 09:20:54 raspberrypi kernel: oom-kill:constraint=CONSTRAINT_NONE,nodemask=(null),cpuset=containerd.service,mems_allowed=0,global_oom,task_memcg=/,task=python3,pid=3054,uid=1000
+Nov 24 09:20:54 raspberrypi kernel: Out of memory: Killed process 3054 (python3) total-vm:12419920kB, anon-rss:4023264kB, file-rss:0kB, shmem-rss:512kB, UID:1000 pgtables:4032kB oom_score_adj:0
+
+Nov 24 09:21:26 raspberrypi kernel: brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout
+Nov 24 09:21:27 raspberrypi kernel: ieee80211 phy0: brcmf_cfg80211_dump_station: BRCMF_C_GET_ASSOCLIST failed, err=-110
+
+Nov 24 09:21:28 raspberrypi sshd[21900]: error: kex_exchange_identification: Connection closed by remote host
+Nov 24 09:22:24 raspberrypi sshd[923]: error: beginning MaxStartups throttling
+Nov 24 09:24:08 raspberrypi sshd[22175]: error: kex_exchange_identification: Connection closed by remote host
+Nov 24 09:26:33 raspberrypi sshd[22583]: fatal: ssh_packet_send_debug: send DEBUG: Broken pipe
+
+Nov 24 09:27:21 raspberrypi systemd[1]: Failed to start armpi-vision.service - ArmPi camera vision launch (inside the ArmPiUltra container).
+
+Nov 24 09:29:26 raspberrypi systemd-fstab-generator[24970]: Failed to create unit file '/run/systemd/generator/swapfile.swap', as it already exists. Duplicate entry in '/etc/fstab'?
+Nov 24 09:29:26 raspberrypi (sd-execut[24965]: /usr/lib/systemd/system-generators/systemd-fstab-generator failed with exit status 1.
+
+Nov 24 09:35:24 raspberrypi kernel: __vm_enough_memory: pid: 24109, comm: python3, not enough memory for the allocation
+Nov 24 09:48:46 raspberrypi kernel: __vm_enough_memory: pid: 36522, comm: python3, not enough memory for the allocation
+Nov 24 09:48:46 raspberrypi kernel: __vm_enough_memory: pid: 33916, comm: python3, not enough memory for the allocation
+
+# Last log line of that boot, immediately before the manual power cycle:
+Nov 24 09:53:02
+
+# --- fstab before the fix (deduplicated 2026-11-24) ---
+# /swapfile swap swap defaults 0 0   (line 4)
+# /swapfile swap swap defaults 0 0   (line 5)
+# /swapfile swap swap defaults 0 0   (line 6)
+# /swapfile swap swap defaults 0 0   (line 9)

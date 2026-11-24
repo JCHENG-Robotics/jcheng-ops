@@ -1,0 +1,89 @@
+# Verification output, 2026-11-24 (post-install, robot at 10.42.0.218)
+# Sanitized: no tokens. Times are the robot's local clock unless noted.
+
+== hardware watchdog
+$ systemctl show -p RuntimeWatchdogUSec
+RuntimeWatchdogUSec=15s
+
+$ sudo ls -l /proc/1/fd | grep watchdog
+l-wx------ 1 root root 64 Nov 24 10:08 9 -> /dev/watchdog0
+
+$ wdctl
+Device:        /dev/watchdog0
+Identity:      Broadcom BCM2835 Watchdog timer [version 0]
+Timeout:       15 seconds
+FLAG           DESCRIPTION              STATUS BOOT-STATUS
+SETTIMEOUT     Set timeout (in seconds)    0           0      # cannot be changed
+
+== health timer
+$ systemctl is-enabled armpi-ops-health.timer ; systemctl is-active armpi-ops-health.timer
+enabled
+active
+
+$ cat /run/armpi-ops/status.json
+{
+ "actions": [],
+ "checked_at": "2026-11-24T10:11:06+0800",
+ "elapsed_ms": 23,
+ "failures": {"armpi-gateway": 0, "armpi-gateway-pose": 0, "sshd": 0},
+ "gateways": {
+  "armpi-gateway": {"motion_state": "disabled", "safety_stop": false},
+  "armpi-gateway-pose": {"motion_state": "idle", "safety_stop": false}
+ },
+ "mem_available_mb": 6638,
+ "swap_free_mb": 5219,
+ "summary": "ok"
+}
+
+== gateways after the reboot (8766 started by hand, it is not enabled at boot)
+$ curl -H "X-Armpi-Token: <redacted>" http://10.42.0.218:8765/health
+{"status":"ok","ros_ready":true,"battery_ready":true,"camera_ready":true,
+ "aux_camera_ready":true,"joints_ready":true,"measured_ready":true,
+ "tf_ready":true,"motion_enabled":false,...}
+
+$ curl -H "X-Armpi-Token: <redacted>" http://10.42.0.218:8766/health
+{"status":"ok","ros_ready":true,"motion_enabled":true,"motion_state":"idle",
+ "motion_mode":"pose","safety_stop":false,"chassis_enabled":true,...}
+
+== restart policies / OOM protection
+$ systemctl show armpi-gateway-pose -p Restart -p OOMScoreAdjust --value
+always
+-500
+$ systemctl show armpi-gateway -p OOMScoreAdjust --value
+-500
+$ systemctl show start_node -p Restart --value
+on-failure
+
+== fstab
+$ grep -c '^/swapfile' /etc/fstab
+1                                  # was 4 before the fix
+$ free -m | tail -1
+Swap:           5219           0        5219
+
+== laptop: Studio watchdog
+$ systemctl --user is-enabled armpi-studio-watchdog ; systemctl --user is-active armpi-studio-watchdog
+enabled
+active
+
+$ curl -s http://127.0.0.1:8000/api/health | jq -c .capabilities
+{"hardware_motion":true,"hardware_read":true,...,"motion_mode":"pose_takeover",
+ "motion_scope":"pose","max_velocity_rad_s":0.5,"gripper_control":true,"pose_gate":true}
+
+$ cat ~/.local/state/armpi-studio/watchdog.log
+2026-11-24 10:09:46 watchdog start: pid 904381 interval 30s threshold 2 port 8000
+2026-11-24 10:11:30 watchdog stopping
+2026-11-24 10:11:30 watchdog start: pid 904927 interval 30s threshold 2 port 8000
+
+== watchdog decision branches (dry-run)
+# A: health failing on an unused port, robot gateway reachable
+2026-11-24 10:09:52 health check failed (1/1)
+2026-11-24 10:09:52 gateway reachable; restarting the unhealthy backend
+2026-11-24 10:09:53 [dry-run] would start the backend on 127.0.0.1:8999
+
+# B: health failing, port held by a listener, robot gateway unreachable
+2026-11-24 10:10:04 health check failed (1/1)
+2026-11-24 10:10:04 gateway unreachable and port 8998 is held; leaving the backend alone (robot down)
+
+== repository gate
+$ python3 -m pytest -q tests
+5 passed in 0.03s

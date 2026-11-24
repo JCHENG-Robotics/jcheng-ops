@@ -1,0 +1,12 @@
+[Unit]
+Description=ArmPi Debug Studio backend watchdog
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/bin/bash @REPO@/studio/studio_watchdog.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,310 @@
+#!/usr/bin/env python3
+"""One health-check cycle for the ArmPi host services.
+
+Run by armpi-ops-health.timer every 30 s as root. The script is deliberately
+small and stdlib-only: the failure it guards against is a memory-starved host,
+so the checker must never be the reason memory runs out.
+
+What it checks, per cycle:
+
+* both gateways (`armpi-gateway` on 8765, `armpi-gateway-pose` on 8766) answer
+  `/health` within 4 s;
+* the local sshd sends its `SSH-2.0` banner within 3 s (the 2026-11-24 wedge
+  accepted TCP connections but never completed the banner exchange);
+* `MemAvailable` / `SwapFree` are not in the pressure zone, and if they are,
+  the top resident processes are logged so the next incident names its culprit.
+
+Restarts need three consecutive failures of the same probe, so one slow cycle
+(camera snapshot, SD-card stall) does not bounce a service. A gateway is only
+restarted while the other gateway reports motion idle: a restart never issues a
+motion command, but it must not take the reader away mid-segment.
+
+State (failure streaks, last summary) lives in /run/armpi-ops/, so a reboot
+starts clean. The exit status is always 0; findings go to the journal and to
+/run/armpi-ops/status.json.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import socket
+import subprocess
+import sys
+import time
+import urllib.request
+
+# The gateways run inside the ArmPiUltra container and read their token from
+# /home/ubuntu/shared/...; on the host that directory is the bind mount
+# /home/pi/docker/tmp. Try both so the script works either way. Set
+# ARMPI_OPS_TOKEN_FILE to override the search.
+TOKEN_CANDIDATES = tuple(
+    path
+    for path in (
+        os.environ.get("ARMPI_OPS_TOKEN_FILE"),
+        "/home/pi/docker/tmp/armpi_gateway_deploy/token",
+        "/home/ubuntu/shared/armpi_gateway_deploy/token",
+    )
+    if path
+)
+TOKEN_HEADER = "X-Armpi-Token"
+GATEWAYS = (
+    ("armpi-gateway", 8765),
+    ("armpi-gateway-pose", 8766),
+)
+# The gateways bind one explicit address (ARMPI_GATEWAY_BIND /
+# ARMPI_GATEWAY_POSE_BIND in /etc/armpi-gateway/*.env, currently 10.42.0.218),
+# not 0.0.0.0, so a loopback probe is refused. Read the bind address and fall
+# back to the documented default.
+GATEWAY_ENV = {
+    "armpi-gateway": ("/etc/armpi-gateway/gateway.env", "ARMPI_GATEWAY_BIND"),
+    "armpi-gateway-pose": ("/etc/armpi-gateway/pose.env", "ARMPI_GATEWAY_POSE_BIND"),
+}
+DEFAULT_BIND = os.environ.get("ARMPI_OPS_BIND", "10.42.0.218")
+STATE_DIR = "/run/armpi-ops"
+STATE_PATH = os.path.join(STATE_DIR, "state.json")
+STATUS_PATH = os.path.join(STATE_DIR, "status.json")
+FAIL_THRESHOLD = 3
+MEM_WARN_KB = 400_000
+SWAP_WARN_KB = 200_000
+HTTP_TIMEOUT_S = 4
+SSH_TIMEOUT_S = 3
+DRY_RUN = "--dry-run" in sys.argv[1:]
+IDLE_MOTION_STATES = {"idle", "disabled", None}
+
+
+def log(message: str) -> None:
+    print(f"armpi-ops-health: {message}", flush=True)
+
+
+def read_token() -> str | None:
+    for path in TOKEN_CANDIDATES:
+        try:
+            with open(path, encoding="utf-8") as handle:
+                return handle.read().strip()
+        except OSError:
+            continue
+    log(f"cannot read the gateway token from any of {TOKEN_CANDIDATES}")
+    return None
+
+
+def gateway_bind(unit: str) -> str:
+    path, key = GATEWAY_ENV.get(unit, ("", ""))
+    if path:
+        try:
+            with open(path, encoding="utf-8") as handle:
+                for line in handle:
+                    stripped = line.strip()
+                    if stripped.startswith(f"{key}="):
+                        return stripped.split("=", 1)[1].strip().strip('"')
+        except OSError:
+            pass
+    return DEFAULT_BIND
+
+
+def http_health(unit: str, port: int, token: str | None) -> dict | None:
+    if not token:
+        return None
+    last_error: object = "no address tried"
+    for host in dict.fromkeys((gateway_bind(unit), DEFAULT_BIND, "127.0.0.1")):
+        request = urllib.request.Request(
+            f"http://{host}:{port}/health", headers={TOKEN_HEADER: token}
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_S) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except (OSError, ValueError) as exc:
+            last_error = exc
+            continue
+        if payload.get("status") != "ok":
+            log(f"{unit} ({host}:{port}): health not ok: {payload.get('status')!r}")
+            return None
+        return payload
+    log(f"{unit} (port {port}): health probe failed: {last_error}")
+    return None
+
+
+def motion_active(health: dict | None) -> bool:
+    if health is None:
+        return False
+    return health.get("motion_state") not in IDLE_MOTION_STATES
+
+
+def ssh_banner_ok() -> bool:
+    try:
+        with socket.create_connection(("127.0.0.1", 22), timeout=SSH_TIMEOUT_S) as sock:
+            sock.settimeout(SSH_TIMEOUT_S)
+            banner = sock.recv(16)
+    except OSError as exc:
+        log(f"sshd banner probe failed: {exc}")
+        return False
+    if not banner.startswith(b"SSH-"):
+        log(f"sshd banner probe got {banner!r}")
+        return False
+    return True
+
+
+def meminfo() -> dict[str, int]:
+    values: dict[str, int] = {}
+    try:
+        with open("/proc/meminfo", encoding="utf-8") as handle:
+            for line in handle:
+                key, _, rest = line.partition(":")
+                if key in ("MemAvailable", "SwapFree"):
+                    values[key] = int(rest.split()[0])
+    except OSError as exc:
+        log(f"cannot read /proc/meminfo: {exc}")
+    return values
+
+
+def top_resident(limit: int = 3) -> list[str]:
+    """Return the largest RSS holders as 'name(pid)=MB' strings."""
+    rows: list[tuple[int, int, str]] = []
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit():
+            continue
+        pid = int(entry)
+        try:
+            with open(f"/proc/{pid}/status", encoding="utf-8") as handle:
+                name = ""
+                rss_kb = 0
+                for line in handle:
+                    if line.startswith("Name:"):
+                        name = line.split(":", 1)[1].strip()
+                    elif line.startswith("VmRSS:"):
+                        rss_kb = int(line.split()[1])
+                        break
+        except (OSError, ValueError):
+            continue
+        if rss_kb:
+            rows.append((rss_kb, pid, name))
+    rows.sort(reverse=True)
+    return [f"{name}({pid})={rss_kb // 1024}MB" for rss_kb, pid, name in rows[:limit]]
+
+
+def systemctl(*args: str) -> tuple[int, str]:
+    try:
+        result = subprocess.run(
+            ["systemctl", *args],
+            capture_output=True,
+            text=True,
+            timeout=45,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return 1, str(exc)
+    return result.returncode, (result.stdout + result.stderr).strip()
+
+
+def load_state() -> dict:
+    try:
+        with open(STATE_PATH, encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_json(path: str, payload: dict) -> None:
+    os.makedirs(STATE_DIR, exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=1, sort_keys=True)
+    os.replace(tmp, path)
+
+
+def restart(unit: str, reason: str, actions: list[str]) -> None:
+    if DRY_RUN:
+        log(f"[dry-run] would restart {unit}: {reason}")
+        actions.append(f"dry-run restart {unit}: {reason}")
+        return
+    code, output = systemctl("restart", unit)
+    if code == 0:
+        log(f"restarted {unit}: {reason}")
+        actions.append(f"restarted {unit}: {reason}")
+    else:
+        log(f"restart of {unit} failed ({code}): {output}")
+        actions.append(f"restart {unit} failed ({code})")
+
+
+def main() -> int:
+    started_at = time.time()
+    token = read_token()
+    failures = load_state().get("failures", {})
+    actions: list[str] = []
+
+    memory = meminfo()
+    mem_available = memory.get("MemAvailable")
+    swap_free = memory.get("SwapFree")
+    if mem_available is not None and mem_available < MEM_WARN_KB:
+        log(
+            "memory pressure: MemAvailable=%dMB SwapFree=%dMB top=%s"
+            % (
+                mem_available // 1024,
+                (swap_free or 0) // 1024,
+                ", ".join(top_resident()),
+            )
+        )
+    elif swap_free is not None and swap_free < SWAP_WARN_KB:
+        log(f"swap nearly full: SwapFree={swap_free // 1024}MB")
+
+    gateway_health: dict[str, dict | None] = {}
+    for unit, port in GATEWAYS:
+        gateway_health[unit] = http_health(unit, port, token)
+
+    for unit, _port in GATEWAYS:
+        if gateway_health[unit] is not None:
+            failures[unit] = 0
+            continue
+        failures[unit] = int(failures.get(unit, 0)) + 1
+        if failures[unit] < FAIL_THRESHOLD:
+            continue
+        other = [u for u, _ in GATEWAYS if u != unit][0]
+        if motion_active(gateway_health.get(other)):
+            log(f"{unit} unhealthy but {other} reports motion active; not restarting")
+            actions.append(f"skipped restart of {unit}: motion active")
+            continue
+        restart(unit, f"{failures[unit]} consecutive health failures", actions)
+        failures[unit] = 0
+
+    if ssh_banner_ok():
+        failures["sshd"] = 0
+    else:
+        failures["sshd"] = int(failures.get("sshd", 0)) + 1
+        if failures["sshd"] >= FAIL_THRESHOLD:
+            restart("ssh", f"{failures['sshd']} consecutive banner failures", actions)
+            failures["sshd"] = 0
+
+    summary = (
+        "ok"
+        if all(gateway_health[u] is not None for u, _ in GATEWAYS)
+        and not actions
+        else "degraded"
+    )
+    status = {
+        "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "elapsed_ms": int((time.time() - started_at) * 1000),
+        "summary": summary,
+        "gateways": {
+            unit: (None if health is None else {
+                "motion_state": health.get("motion_state"),
+                "safety_stop": health.get("safety_stop"),
+            })
+            for unit, health in gateway_health.items()
+        },
+        "failures": failures,
+        "actions": actions,
+        "mem_available_mb": None if mem_available is None else mem_available // 1024,
+        "swap_free_mb": None if swap_free is None else swap_free // 1024,
+    }
+    save_json(STATUS_PATH, status)
+
+    state = load_state()
+    if state.get("summary") != summary or actions:
+        log(f"summary={summary} actions={actions or 'none'}")
+    state.update({"failures": failures, "summary": summary})
+    save_json(STATE_PATH, state)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,13 @@
+[Unit]
+Description=ArmPi host health watch (gateways, sshd, memory pressure)
+Documentation=https://github.com/JCHENG-Robotics/jcheng-ops
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/armpi-ops-health
+Nice=5
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+# The checker must survive the memory pressure it is meant to report.
+OOMScoreAdjust=-500

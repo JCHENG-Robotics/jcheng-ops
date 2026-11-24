@@ -1,0 +1,9 @@
+# Two-reviewer model (adopted 2026-11-23). Both maintainers can approve.
+* @JerichoCheng @JerichoSwaine
+
+# Operations scripts run as root on the robot and as the operator on the
+# laptop; every change needs an explicit review.
+/robot/   @JerichoCheng @JerichoSwaine
+/studio/  @JerichoCheng @JerichoSwaine
+/scripts/ @JerichoCheng @JerichoSwaine
+/.github/ @JerichoCheng @JerichoSwaine
