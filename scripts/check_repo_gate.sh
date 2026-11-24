@@ -18,6 +18,9 @@ while IFS= read -r path; do
     [[ -e "$path" ]] || fail "missing $path"
 done <<'EOF'
 README.md
+README.zh-CN.md
+ROADMAP.md
+ACCEPTANCE.md
 VERSION
 CHANGELOG.md
 LICENSE-REVIEW.md

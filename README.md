@@ -1,137 +1,162 @@
 # jcheng-ops
 
-JCHENG Robotics 的机器人运维仓库：无人值守健康巡检、硬件看门狗、服务自愈、
-操作员笔记本上的 Studio 看护，以及对应的事故手册。
+Robot operations for JCHENG Robotics: unattended health checks, a hardware
+watchdog, service self-healing, the Studio watchdog on the operator laptop, and
+the incident runbook behind them.
 
-面向 **ArmPi Ultra**（Raspberry Pi 5 + 厂商 ROS 2 Humble 栈）和操作员笔记本上的
-ArmPi Debug Studio。
+Target: **ArmPi Ultra** (Raspberry Pi 5 + vendor ROS 2 Humble stack) and the
+ArmPi Debug Studio on the operator laptop.
 
-> 状态：**v0.1.0（2026-11-24）**。机器人侧的四层防护（15 s 硬件看门狗、
-> 30 s 健康巡检、重启策略、OOM 保护）已安装并逐项验证；笔记本侧 Studio 看护已
-> 安装并跑通“重启/拒绝重启”两条分支。
-> **看门狗尚末在真实卡死中自动触发过**——装机当天没有复现事故，所以这里是
-> “按设计可用”，不是“已经救过一次场”。
+> Status: **Deployed** — v0.1.0 (2026-11-24). The four robot-side guards (15 s
+> hardware watchdog, 30 s health timer, restart policies, OOM protection) are
+> installed and verified item by item; the laptop Studio watchdog is installed
+> and both the restart and refuse-to-restart branches were exercised.
+> **The watchdog has never fired in a real wedge.** No incident was reproduced
+> on installation day, so this is "correct by design", not "it has saved a
+> session".
+> English canonical; see [README.zh-CN.md](README.zh-CN.md) for the Chinese translation.
 
-本仓库**不发送任何运动命令**，不拥有相机/串口/总线设备，也不替代急停。
+This repository **sends no motion command**, owns no camera/serial/bus device
+and does not replace the e-stop.
 
 ---
 
-## 1. 为什么存在
+## 1. Why this exists
 
-2026-11-24 09:20，机器人发生一次 OOM：内核杀掉了一个约 4 GB 的 `python3`
-（12.4 GB 虚拟内存）。随后 sshd 触发 `MaxStartups` 限流、`armpi-vision` 起不来、
-8765 网关 socket 只接受连接不应答，系统进入半死状态，**只能断电**。
+At 09:20 on 2026-11-24 the robot suffered an OOM: the kernel killed a ~4 GB
+`python3` (12.4 GB virtual memory). sshd then hit its `MaxStartups` limit,
+`armpi-vision` would not start, the 8765 gateway socket accepted connections but
+never answered, and the system entered a half-dead state that **required a power
+cycle**.
 
-最麻烦的是它骗过了所有只看网络的监控：
+The worst part is that every network-only check looked fine:
 
-| 检查 | 事故中的表现 | 结论 |
+| Check | During the incident | Conclusion |
 |---|---|---|
-| `ping 10.42.0.218` | 0.16 ms 正常 | 网线和 Pi 内核都活着 |
-| TCP 22 | 可以建立连接 | 端口在听 |
-| SSH banner | 永不返回（IPv4、IPv6 链路本地都一样） | sshd 用户态卡死 |
-| `8765 /health` | 接受 SYN、永不应答 | 网关进程挂死 |
-| `8766` | `Connection refused` | pose 网关没在跑 |
+| `ping 10.42.0.218` | 0.16 ms, normal | Cable and Pi kernel alive |
+| TCP 22 | Connection established | Port listening |
+| SSH banner | Never returned (IPv4 and IPv6 link-local alike) | sshd wedged in user space |
+| `8765 /health` | SYN accepted, no response | Gateway process hung |
+| `8766` | `Connection refused` | Pose gateway not running |
 
-所以本仓库的第一原则是：**探应用层，不探网络层**；第二原则是：
-**在机器人不可达时，绝不把笔记本上的 Studio 弄停**。
+The first principle is therefore: **probe the application layer, not the
+network layer**. The second: **never take the laptop Studio down because the
+robot is unreachable**.
 
-完整时间线与证据：[`docs/INCIDENT-2026-11-24.md`](docs/INCIDENT-2026-11-24.md)。
+Full timeline and evidence: [`docs/INCIDENT-2026-11-24.md`](docs/INCIDENT-2026-11-24.md).
 
-## 2. 分层
+## 2. Layers
 
-| 层 | 位置 | 触发条件 | 动作 | 已验证 |
+| Layer | Location | Trigger | Action | Verified |
 |---|---|---|---|---|
-| 硬件看门狗 | 机器人 PID 1 | systemd 停止喂 `/dev/watchdog0` | 整板重启 | 已装载（`RuntimeWatchdogUSec=15s`，PID 1 持有 fd） |
-| 健康巡检 | 机器人 `armpi-ops-health.timer` | 每 30 s；同一探针连续失败 3 次 | 重启对应 systemd 服务 | 实机运行，`status.json` 全绿 |
-| 重启策略 | 机器人 systemd drop-ins | 进程崩溃/退出 | `armpi-gateway-pose` 始终拉起，`start_node` 失败拉起 | `systemctl show` 已确认 |
-| OOM 保护 | 机器人 systemd drop-ins | 内核选择牺牲者 | sshd/网关/start_node 更难被杀 | `OOMScoreAdjust` 已设置（进程重启后完全生效） |
-| Studio 看护 | 笔记本 systemd user 服务 | `/api/health` 连续失败 2 次 | 重启后端；网关不可达时拒绝 | 两条分支均 dry-run 实测 |
+| Hardware watchdog | Robot PID 1 | systemd stops feeding `/dev/watchdog0` | Full board reboot | Armed (`RuntimeWatchdogUSec=15s`; PID 1 holds the fd) |
+| Health check | Robot `armpi-ops-health.timer` | Every 30 s; 3 consecutive failures per probe | Restart the matching systemd service | Running on hardware; `status.json` green |
+| Restart policies | Robot systemd drop-ins | Process crash/exit | `armpi-gateway-pose` always restarts; `start_node` on failure | Confirmed with `systemctl show` |
+| OOM protection | Robot systemd drop-ins | Kernel picks a victim | sshd/gateways/start_node are harder to kill | `OOMScoreAdjust` set; fully effective after process restart |
+| Studio watchdog | Laptop systemd user service | 2 consecutive `/api/health` failures | Restart the backend; refuse while the gateway is unreachable | Both branches dry-run tested |
 
-安全约束（全部已实现）：
+Safety constraints (all implemented):
 
-- 健康巡检重启网关前，必须由**另一个网关**报告 `motion_state` 为 `idle`/`disabled`；
-  运动中只记日志，不重启。
-- 两个网关都失联时，第三次连续失败才允许重启（此时运动状态已不可知）。
-- Studio 看护在机器人网关不可达时**不杀**占用 8000 端口的后端，只每 5 分钟记一次日志。
-- 所有动作只重启进程，不发运动命令。
+- Before restarting a gateway, the health check requires the **other gateway**
+  to report `motion_state` as `idle`/`disabled`; while motion is active it only
+  logs.
+- If both gateways are unreachable, a restart is allowed only on the third
+  consecutive failure (motion state is then unknowable).
+- The Studio watchdog **does not kill** a process on port 8000 while the robot
+  gateway is unreachable; it logs once every five minutes.
+- Every action restarts a process; none sends a motion command.
 
-## 3. 安装
+## 3. Installation
 
-机器人（`pi` 有 NOPASSWD sudo；安装器幂等）：
+Robot (`pi` has NOPASSWD sudo; the installer is idempotent):
 
 ```bash
 scp robot/* pi@10.42.0.218:/tmp/armpi-ops/
 ssh pi@10.42.0.218 sudo bash /tmp/armpi-ops/install-pi-ops.sh
-# 只装巡检/自启/OOM 保护、不装硬件看门狗：
+# health/restart/OOM only, without the hardware watchdog:
 ssh pi@10.42.0.218 sudo bash /tmp/armpi-ops/install-pi-ops.sh --no-watchdog
 ```
 
-笔记本（Studio 看护）：
+Laptop (Studio watchdog):
 
 ```bash
 studio/install-studio-watchdog.sh
-sudo loginctl enable-linger "$USER"   # 一次；否则注销/重启后看护停止
+sudo loginctl enable-linger "$USER"   # once; otherwise the watchdog stops at logout/reboot
 ```
 
-`install-studio-watchdog.sh` 会读取网关 token（依次尝试 `ARMPI_GATEWAY_TOKEN`、
-正在运行的后端环境、SSH 读取机器人上的 token 文件），写入
-`~/.config/armpi-studio/studio.env`（0600）。后端目录默认
-`~/jcheng/jcheng-manipulation/armpi-debug-studio/backend`，可用
-`ARMPI_STUDIO_BACKEND_DIR` 覆盖。
+`install-studio-watchdog.sh` resolves the gateway token (in order:
+`ARMPI_GATEWAY_TOKEN`, the running backend environment, an SSH read of the
+robot token file) and writes `~/.config/armpi-studio/studio.env` (0600). The
+backend directory defaults to
+`~/jcheng/jcheng-manipulation/armpi-debug-studio/backend` and can be overridden
+with `ARMPI_STUDIO_BACKEND_DIR`.
 
-## 4. 验证
+## 4. Verification
 
 ```bash
-# 机器人
+# Robot
 systemctl show -p RuntimeWatchdogUSec            # 15s
-sudo ls -l /proc/1/fd | grep watchdog            # PID 1 持有 /dev/watchdog0
+sudo ls -l /proc/1/fd | grep watchdog            # PID 1 holds /dev/watchdog0
 systemctl list-timers armpi-ops-health.timer
 cat /run/armpi-ops/status.json
 sudo journalctl -u armpi-ops-health.service -n 20
-sudo /usr/local/sbin/armpi-ops-health --dry-run  # 只探测，不重启
+sudo /usr/local/sbin/armpi-ops-health --dry-run  # probe only, no restart
 
-# 笔记本
+# Laptop
 systemctl --user status armpi-studio-watchdog
 tail -f ~/.local/state/armpi-studio/watchdog.log
 ```
 
-仓库自检（CI 同款，不接触机器人）：
+Repository gate (CI equivalent, never touches the robot):
 
 ```bash
 bash scripts/check_repo_gate.sh
 ```
 
-## 5. 边界与非承诺
+Full verification record: [docs/VERIFICATION.md](docs/VERIFICATION.md); results
+and open items: [ACCEPTANCE.md](ACCEPTANCE.md).
 
-- **不是急停**，不读取编码器/力矩/人员接近，不能阻止运动。
-- **看门狗重启会执行厂商启动序列，机械臂会上电动作**。无人值守时请清空工作区。
-- 15 s 是 BCM2835 看门狗芯片的固定超时（`SETTIMEOUT` 不支持），不是可调参数。
-- 不限制单进程内存。事故中的 4 GB `python3` 不是启动栈的一部分，身份仍未确定；
-  巡检会在 `MemAvailable < 400 MB` 时记录 top 3 常驻进程，供下一次定位。
-- 健康巡检只覆盖 8765/8766 与 sshd，不覆盖 ROS 图内部（MoveIt、控制器、相机驱动）。
-- Studio 看护依赖 `linger`；不开启时只在当前登录会话内有效。
+## 5. Boundaries and non-claims
 
-## 6. 目录
+- **Not an e-stop.** It does not read encoders, torque or human proximity and
+  cannot stop motion.
+- **A watchdog reboot runs the vendor startup sequence and the arm moves.**
+  Keep the workspace clear during unattended operation.
+- 15 s is the fixed BCM2835 watchdog timeout (`SETTIMEOUT` is unsupported); it
+  is not tunable.
+- It does not limit per-process memory. The 4 GB `python3` from the incident is
+  not part of the startup stack and its identity is still unknown; the health
+  check records the top three resident processes when `MemAvailable < 400 MB`
+  for the next investigation.
+- The health check covers 8765/8766 and sshd only, not the ROS graph (MoveIt,
+  controllers, camera drivers).
+- The Studio watchdog depends on `linger`; without it the watchdog only lives
+  in the current login session.
+
+## 6. Layout
 
 ```text
-capability.yaml  组织准入清单：layer ops、无硬件访问、motion_authority: none
-robot/    机器人侧：健康巡检（Python，仅标准库）、service/timer、安装器
-studio/   笔记本侧：Studio 后端看护、systemd user 单元、安装器
-docs/     事故记录、架构、运维手册、验证记录
-evidence/ 事故当时的 journal 摘录与验证输出（已脱敏）
-tests/    巡检决策逻辑的单元测试（不接触机器人）
-scripts/  CI 同款仓库门禁
+capability.yaml  admission manifest: layer ops, no hardware access, motion_authority: none
+robot/    robot side: health check (Python, stdlib only), service/timer, installer
+studio/   laptop side: Studio backend watchdog, systemd user unit, installer
+docs/     incident record, architecture, runbook, verification
+evidence/ journal excerpts and command output from the incident (redacted)
+tests/    unit tests for the health-check decision logic (no robot)
+scripts/  the CI-equivalent repository gate
 ```
 
-## 7. 证据
+## 7. Evidence
 
-- [`docs/INCIDENT-2026-11-24.md`](docs/INCIDENT-2026-11-24.md) — 时间线、根因、
-  贡献因素
-- [`docs/VERIFICATION.md`](docs/VERIFICATION.md) — 2026-11-24 的实机验证记录
-- [`evidence/20261124/`](evidence/20261124/README.md) — journal 摘录与命令输出
+- [`docs/INCIDENT-2026-11-24.md`](docs/INCIDENT-2026-11-24.md) — timeline,
+  root cause, contributing factors
+- [`docs/VERIFICATION.md`](docs/VERIFICATION.md) — 2026-11-24 hardware
+  verification record
+- [`evidence/20261124/`](evidence/20261124/README.md) — journal excerpts and
+  command output
+- [`ACCEPTANCE.md`](ACCEPTANCE.md) — results and open items
 
-## 8. 许可
+## 8. License
 
-**pending。** 本仓库与 JCHENG-Robotics 其他仓库一致，暂不附带 `LICENSE`；
-审查状态见 [`LICENSE-REVIEW.md`](LICENSE-REVIEW.md)。代码只依赖 Python 标准库、
-bash、systemd 与 curl。
+**Pending.** Like the other JCHENG-Robotics repositories, this repository has
+no `LICENSE`; see [`LICENSE-REVIEW.md`](LICENSE-REVIEW.md). The code depends
+only on the Python standard library, bash, systemd and curl.
