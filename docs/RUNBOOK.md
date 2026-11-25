@@ -68,6 +68,10 @@ tail -5 ~/.local/state/armpi-studio/watchdog.log
 IPv6 链路本地 SSH（`ssh -6 pi@fe80::…%<if>`）与 IPv4 走同一个 sshd；如果两者都
 没有 banner，就是用户态问题，不是链路问题。
 
+容器重建、镜像扁平化这类变更**不属于本仓职责**（见 `ROADMAP.md` 的 Out of
+scope：重启厂商容器会移动机械臂，必须有人在现场）。步骤、运行参数和回滚见
+`JCHENG-Robotics/jcheng-system` 的 `deploy/armpi-ultra/README.md`。
+
 ## 4. 令牌与地址（最容易踩的坑）
 
 - 网关绑定显式地址：`/etc/armpi-gateway/gateway.env` 的 `ARMPI_GATEWAY_BIND`、
