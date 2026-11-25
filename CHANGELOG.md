@@ -8,6 +8,11 @@ All notable changes to this project are documented here. Format based on
 
 ### Added
 
+- `armpi-ops-health` honors `/run/armpi-ops/hold-pose`: a failed
+  `armpi-gateway-pose` is logged and left down instead of being restarted, so a
+  perception run can keep the motion gateway stopped without disabling the
+  whole health timer. `test_pose_restart_skipped_while_perception_hold` covers
+  it; RUNBOOK section 5 documents create/remove.
 - `capability.yaml` — the organization admission manifest: layer `ops`
   (cross-layer, not imported by any runtime repository), no hardware access,
   `motion_authority: none`, the three runtime roles and their forbidden

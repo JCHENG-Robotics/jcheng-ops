@@ -17,7 +17,10 @@ What it checks, per cycle:
 Restarts need three consecutive failures of the same probe, so one slow cycle
 (camera snapshot, SD-card stall) does not bounce a service. A gateway is only
 restarted while the other gateway reports motion idle: a restart never issues a
-motion command, but it must not take the reader away mid-segment.
+motion command, but it must not take the reader away mid-segment. A failed
+``armpi-gateway-pose`` is also left down while the perception hold marker
+``/run/armpi-ops/hold-pose`` exists; the operator creates it for a perception
+run and removes it afterwards.
 
 State (failure streaks, last summary) lives in /run/armpi-ops/, so a reboot
 starts clean. The exit status is always 0; findings go to the journal and to
@@ -64,6 +67,10 @@ DEFAULT_BIND = os.environ.get("ARMPI_OPS_BIND", "10.42.0.218")
 STATE_DIR = "/run/armpi-ops"
 STATE_PATH = os.path.join(STATE_DIR, "state.json")
 STATUS_PATH = os.path.join(STATE_DIR, "status.json")
+# Operator marker for perception runs: keep a stopped pose gateway down
+# instead of restarting it every three probes. Created/removed with
+# `touch`/`rm`; cleared by a reboot like the rest of /run.
+POSE_HOLD_PATH = os.path.join(STATE_DIR, "hold-pose")
 FAIL_THRESHOLD = 3
 MEM_WARN_KB = 400_000
 SWAP_WARN_KB = 200_000
@@ -257,6 +264,10 @@ def main() -> int:
             continue
         failures[unit] = int(failures.get(unit, 0)) + 1
         if failures[unit] < FAIL_THRESHOLD:
+            continue
+        if unit == "armpi-gateway-pose" and os.path.exists(POSE_HOLD_PATH):
+            log(f"{unit} unhealthy but {POSE_HOLD_PATH} is present; not restarting")
+            actions.append(f"skipped restart of {unit}: perception hold")
             continue
         other = [u for u, _ in GATEWAYS if u != unit][0]
         if motion_active(gateway_health.get(other)):

@@ -70,6 +70,9 @@ safety:
     while the other gateway reports motion_state idle or disabled.
   - If both gateways are down the motion state is unknowable; a restart happens
     only on the third consecutive failure.
+  - A failed `armpi-gateway-pose` is logged and left down while
+    `/run/armpi-ops/hold-pose` exists; the operator creates that marker for a
+    perception run and removes it afterwards.
   - sshd is restarted only after three consecutive local banner failures
     (about 90 s).
   - The Studio watchdog never kills a backend while the robot gateway is
@@ -82,7 +85,7 @@ safety:
     state.
 
 verification:
-  unit_tests: 5
+  unit_tests: 6
   repo_gate: passed (scripts/check_repo_gate.sh, required check ops-gate)
   robot_install: >-
     passed 2026-11-24 (RuntimeWatchdogUSec=15s, PID 1 holds /dev/watchdog0,

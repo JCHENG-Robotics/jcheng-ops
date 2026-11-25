@@ -98,3 +98,27 @@ def test_status_file_records_memory_and_gateways(tmp_path, monkeypatch):
     assert status["summary"] == "ok"
     assert status["gateways"]["gw-a"]["motion_state"] == "idle"
     assert "mem_available_mb" in status
+
+
+def test_pose_restart_skipped_while_perception_hold(tmp_path, monkeypatch):
+    module = load(tmp_path)
+    monkeypatch.setattr(
+        module,
+        "GATEWAYS",
+        (("armpi-gateway", 8765), ("armpi-gateway-pose", 8766)),
+    )
+
+    def probe(unit, port, token):
+        if unit == "armpi-gateway":
+            return {"status": "ok", "motion_state": "disabled"}
+        return None
+
+    monkeypatch.setattr(module, "http_health", probe)
+    hold = tmp_path / "hold-pose"
+    hold.write_text("", encoding="utf-8")
+    monkeypatch.setattr(module, "POSE_HOLD_PATH", str(hold))
+    module.main()
+
+    actions = read_status(tmp_path)["actions"]
+    assert actions == [
+        "skipped restart of armpi-gateway-pose: perception hold"]

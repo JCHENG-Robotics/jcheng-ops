@@ -89,6 +89,7 @@ scope：重启厂商容器会移动机械臂，必须有人在现场）。步骤
 |---|---|
 | 巡检更灵敏 | 改 `armpi-ops-health.timer` 的 `OnUnitActiveSec`，或代码里的 `FAIL_THRESHOLD` |
 | 临时不重启任何东西 | `sudo systemctl stop armpi-ops-health.timer` |
+| perception 运行时保持 8766 停止 | `sudo touch /run/armpi-ops/hold-pose`，再 `sudo systemctl stop armpi-gateway-pose`；巡检不会重启它。结束后 `sudo rm /run/armpi-ops/hold-pose`、`sudo systemctl start armpi-gateway-pose` |
 | 关闭看门狗 | `sudo bash robot/install-pi-ops.sh --no-watchdog` |
 | 关闭 Studio 看护 | `systemctl --user disable --now armpi-studio-watchdog` |
 
