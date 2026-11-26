@@ -35,7 +35,7 @@ The worst part is that every network-only check looked fine:
 
 | Check | During the incident | Conclusion |
 |---|---|---|
-| `ping 10.42.0.218` | 0.16 ms, normal | Cable and Pi kernel alive |
+| `ping <ROBOT_LINK_IP>` | 0.16 ms, normal | Cable and Pi kernel alive |
 | TCP 22 | Connection established | Port listening |
 | SSH banner | Never returned (IPv4 and IPv6 link-local alike) | sshd wedged in user space |
 | `8765 /health` | SYN accepted, no response | Gateway process hung |
@@ -70,13 +70,13 @@ Safety constraints (all implemented):
 
 ## 3. Installation
 
-Robot (`pi` has NOPASSWD sudo; the installer is idempotent):
+Robot (the robot account has NOPASSWD sudo; the installer is idempotent):
 
 ```bash
-scp robot/* pi@10.42.0.218:/tmp/armpi-ops/
-ssh pi@10.42.0.218 sudo bash /tmp/armpi-ops/install-pi-ops.sh
+scp robot/* <ROBOT_USER>@<ROBOT_LINK_IP>:/tmp/armpi-ops/
+ssh <ROBOT_USER>@<ROBOT_LINK_IP> sudo bash /tmp/armpi-ops/install-pi-ops.sh
 # health/restart/OOM only, without the hardware watchdog:
-ssh pi@10.42.0.218 sudo bash /tmp/armpi-ops/install-pi-ops.sh --no-watchdog
+ssh <ROBOT_USER>@<ROBOT_LINK_IP> sudo bash /tmp/armpi-ops/install-pi-ops.sh --no-watchdog
 ```
 
 Laptop (Studio watchdog):

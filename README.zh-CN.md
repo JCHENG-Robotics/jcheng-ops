@@ -29,7 +29,7 @@ ArmPi Debug Studio。
 
 | 检查 | 事故中的表现 | 结论 |
 |---|---|---|
-| `ping 10.42.0.218` | 0.16 ms 正常 | 网线和 Pi 内核都活着 |
+| `ping <ROBOT_LINK_IP>` | 0.16 ms 正常 | 网线和 Pi 内核都活着 |
 | TCP 22 | 可以建立连接 | 端口在听 |
 | SSH banner | 永不返回（IPv4、IPv6 链路本地都一样） | sshd 用户态卡死 |
 | `8765 /health` | 接受 SYN、永不应答 | 网关进程挂死 |
@@ -60,13 +60,13 @@ ArmPi Debug Studio。
 
 ## 3. 安装
 
-机器人（`pi` 有 NOPASSWD sudo；安装器幂等）：
+机器人（机器人账户有 NOPASSWD sudo；安装器幂等）：
 
 ```bash
-scp robot/* pi@10.42.0.218:/tmp/armpi-ops/
-ssh pi@10.42.0.218 sudo bash /tmp/armpi-ops/install-pi-ops.sh
+scp robot/* <ROBOT_USER>@<ROBOT_LINK_IP>:/tmp/armpi-ops/
+ssh <ROBOT_USER>@<ROBOT_LINK_IP> sudo bash /tmp/armpi-ops/install-pi-ops.sh
 # 只装巡检/自启/OOM 保护、不装硬件看门狗：
-ssh pi@10.42.0.218 sudo bash /tmp/armpi-ops/install-pi-ops.sh --no-watchdog
+ssh <ROBOT_USER>@<ROBOT_LINK_IP> sudo bash /tmp/armpi-ops/install-pi-ops.sh --no-watchdog
 ```
 
 笔记本（Studio 看护）：
