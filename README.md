@@ -1,5 +1,7 @@
 # jcheng-ops
 
+**English** | [简体中文](README.zh-CN.md)
+
 Robot operations for JCHENG Robotics: unattended health checks, a hardware
 watchdog, service self-healing, the Studio watchdog on the operator laptop, and
 the incident runbook behind them.
@@ -14,7 +16,7 @@ ArmPi Debug Studio on the operator laptop.
 > **The watchdog has never fired in a real wedge.** No incident was reproduced
 > on installation day, so this is "correct by design", not "it has saved a
 > session".
-> English canonical; see [README.zh-CN.md](README.zh-CN.md) for the Chinese translation.
+> English canonical; the Chinese README is a translation.
 
 This repository **sends no motion command**, owns no camera/serial/bus device
 and does not replace the e-stop.
