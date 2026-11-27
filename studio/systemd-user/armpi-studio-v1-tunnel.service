@@ -1,0 +1,15 @@
+[Unit]
+# Installed by studio/install-studio-watchdog.sh. @ROBOT_HOST@ is substituted.
+Description=SSH tunnel to the robot /v1 gateways (8766 legacy pose, 8767 read-only)
+After=network-online.target
+
+[Service]
+# Both gateways bind 127.0.0.1 on the robot, so the console reaches them only
+# through this forward. 8766 keeps the legacy pose gateway reachable for the
+# existing diagnostics path; 8767 is the R10 read-only /v1 gateway.
+ExecStart=/usr/bin/ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o IdentitiesOnly=yes -i @SSH_KEY@ -L 8766:127.0.0.1:8766 -L 8767:127.0.0.1:8767 @SSH_USER@@ROBOT_HOST@
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
