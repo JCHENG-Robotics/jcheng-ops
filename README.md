@@ -94,6 +94,17 @@ can be overridden with `ARMPI_STUDIO_BACKEND_DIR`. The generated configuration
 is **read-only**: it points at the reachable 8765 gateway and leaves
 `ARMPI_HARDWARE_MOTION` off, so the watchdog never enables motion.
 
+The same installer also writes `armpi-studio-v1-tunnel.service`, an SSH forward
+for the robot's two loopback-only gateways (`8766` legacy pose, `8767` read-only
+`/v1`). When the robot runs `jcheng-system`'s `install-readonly-gateway.sh`, the
+installer reads that gateway's token and contract hash from the robot and adds
+`ARMPI_GATEWAY_V1_URL/TOKEN/CONTRACT_HASH` to `studio.env`, so the console's
+`/v1` diagnostics (`gateway_v1`, `session`) work without a second forward. With
+no `/v1` gateway on the robot the three variables are omitted and those rows stay
+`not_configured` instead of guessing. The installer enables **and restarts** both
+units: `enable --now` alone would leave a running process on its old
+configuration.
+
 ## 4. Verification
 
 ```bash
