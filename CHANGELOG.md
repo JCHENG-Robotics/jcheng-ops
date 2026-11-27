@@ -13,6 +13,15 @@ All notable changes to this project are documented here. Format based on
   `motion_authority: none`, the three runtime roles and their forbidden
   actions, plus the verification record and the three open items.
 
+### Changed
+
+- Studio watchdog defaults now target the successor `jcheng-studio` backend at
+  `~/jcheng/jcheng-studio/backend` instead of the frozen
+  `jcheng-manipulation/armpi-debug-studio` checkout. The generated
+  `studio.env` is read-only: `ARMPI_GATEWAY_URL` points at the reachable 8765
+  gateway, `ARMPI_HARDWARE_MOTION=0`, and the pose takeover scope/ack are no
+  longer written. A service unit must never enable motion.
+
 ## [0.1.0] — 2026-11-24
 
 First version, extracted from the 2026-11-24 incident response.

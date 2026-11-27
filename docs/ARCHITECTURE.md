@@ -96,6 +96,10 @@ OOMScoreAdjust 在进程下一次 exec 时生效，因此安装后不重启单�
 8000 端口。旧顺序在 2026-11-24 把健康后端杀掉、再因为 SSH 失败退出，是那次
 “Studio 也一起挂了”的直接原因。
 
+安装脚本生成的 `studio.env` 是只读配置：后端指向 `jcheng-studio`，网关用
+可达的 8765，`ARMPI_HARDWARE_MOTION=0`。看护单元只负责保活，不启用运动；
+需要运动的会话由操作员手动启动。
+
 ## 6. 配置面
 
 | 变量 | 作用 | 默认 |
@@ -103,7 +107,7 @@ OOMScoreAdjust 在进程下一次 exec 时生效，因此安装后不重启单�
 | `ARMPI_OPS_TOKEN_FILE` | 巡检读取的网关令牌 | 两个已知路径依次尝试 |
 | `ARMPI_OPS_BIND` | 网关未配置时的探测地址 | `10.42.0.218` |
 | `ARMPI_STUDIO_ENV` | Studio 看护的环境文件 | `~/.config/armpi-studio/studio.env` |
-| `ARMPI_STUDIO_BACKEND_DIR` | 后端 checkout | `~/jcheng/jcheng-manipulation/armpi-debug-studio/backend` |
+| `ARMPI_STUDIO_BACKEND_DIR` | 后端 checkout | `~/jcheng/jcheng-studio/backend` |
 | `ARMPI_STUDIO_INTERVAL` / `_FAIL_THRESHOLD` | 看护周期与阈值 | 30 s / 2 |
 | `ARMPI_STUDIO_LOG_DIR` | 看护日志 | `~/.local/state/armpi-studio` |
 

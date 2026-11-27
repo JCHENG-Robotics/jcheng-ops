@@ -14,8 +14,9 @@
 # script logs once every five minutes and leaves the process alone.
 #
 # Configuration lives in ~/.config/armpi-studio/studio.env (0600), written by
-# the installer: ARMPI_MODE, ARMPI_GATEWAY_URL/TOKEN, ARMPI_MOTION_SCOPE,
-# ARMPI_TAKEOVER_ACK, DB_PATH, PORT, BIND_HOST.
+# the installer: ARMPI_MODE, ARMPI_GATEWAY_URL/TOKEN, DB_PATH, PORT, BIND_HOST.
+# The installer writes a read-only configuration (no motion scope or takeover
+# acknowledgement); motion is never enabled by this service.
 #
 # Flags: --once (single cycle, for tests), --dry-run (log only).
 set -uo pipefail
@@ -25,7 +26,7 @@ ENV_FILE="${ARMPI_STUDIO_ENV:-$HOME/.config/armpi-studio/studio.env}"
 LOG_DIR="${ARMPI_STUDIO_LOG_DIR:-$HOME/.local/state/armpi-studio}"
 INTERVAL="${ARMPI_STUDIO_INTERVAL:-30}"
 FAIL_THRESHOLD="${ARMPI_STUDIO_FAIL_THRESHOLD:-2}"
-BACKEND_DIR="${ARMPI_STUDIO_BACKEND_DIR:-$HOME/jcheng/jcheng-manipulation/armpi-debug-studio/backend}"
+BACKEND_DIR="${ARMPI_STUDIO_BACKEND_DIR:-$HOME/jcheng/jcheng-studio/backend}"
 LOG="$LOG_DIR/watchdog.log"
 ONCE=0
 DRY_RUN=0
