@@ -81,6 +81,12 @@ RuntimeWatchdogSec=15
 OOMScoreAdjust 在进程下一次 exec 时生效，因此安装后不重启单元也能保证
 “下次启动生效”，本次没有为此重启 8765 或 sshd。
 
+`start_node` 另有一个 `rrc-wait.conf` drop-in：CH340 舵机适配器会在开机约 50 s
+后重枚举，厂商控制器只打开一次 `/dev/rrc`，ENOENT 后退出，而 `ros2 launch`
+仍然存活，所以 `Restart=on-failure` 不会触发（2026-11-27）。该 drop-in 等
+`/dev/rrc` 解析到的设备连续 15 s 不变（最多 90 s）再启动；它只等待，不打开
+串口，也不发运动命令。
+
 ## 5. 笔记本侧 Studio 看护
 
 ```text
