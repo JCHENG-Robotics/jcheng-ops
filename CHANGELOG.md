@@ -27,6 +27,12 @@ All notable changes to this project are documented here. Format based on
 - The watchdog resolves `ARMPI_STUDIO_BACKEND_DIR` after sourcing
   `studio.env`, so the installed backend path is honored instead of being
   overwritten by the script default.
+- `install-pi-ops.sh` installs a `start_node` drop-in that waits for a stable
+  `/dev/rrc` before launching. The CH340 servo adapter can re-enumerate about
+  50 s after boot; the vendor controller opened the port during the gap,
+  exited with ENOENT, and the ROS launch stayed up, so `Restart=on-failure`
+  never fired (2026-11-27). The wait is state-based, opens no port and
+  commands no motion.
 
 ## [0.1.0] — 2026-11-24
 
