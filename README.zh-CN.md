@@ -78,8 +78,8 @@ sudo loginctl enable-linger "$USER"   # 一次；否则注销/重启后看护停
 
 `install-studio-watchdog.sh` 会读取网关 token（依次尝试 `ARMPI_GATEWAY_TOKEN`、
 正在运行的后端环境、SSH 读取机器人上的 token 文件），写入
-`~/.config/armpi-studio/studio.env`（0600）。后端目录默认
-`~/jcheng/jcheng-studio/backend`，可用 `ARMPI_STUDIO_BACKEND_DIR` 覆盖。
+`~/.config/armpi-studio/studio.env`（0600）。后端目录默认是同级的
+`jcheng-studio/backend` checkout，可用 `ARMPI_STUDIO_BACKEND_DIR` 覆盖。
 生成的配置是**只读**的：指向可达的 8765 网关，并关闭
 `ARMPI_HARDWARE_MOTION`，看护单元永不启用运动。
 

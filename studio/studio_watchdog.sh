@@ -26,7 +26,6 @@ ENV_FILE="${ARMPI_STUDIO_ENV:-$HOME/.config/armpi-studio/studio.env}"
 LOG_DIR="${ARMPI_STUDIO_LOG_DIR:-$HOME/.local/state/armpi-studio}"
 INTERVAL="${ARMPI_STUDIO_INTERVAL:-30}"
 FAIL_THRESHOLD="${ARMPI_STUDIO_FAIL_THRESHOLD:-2}"
-BACKEND_DIR="${ARMPI_STUDIO_BACKEND_DIR:-$HOME/jcheng/jcheng-studio/backend}"
 LOG="$LOG_DIR/watchdog.log"
 ONCE=0
 DRY_RUN=0
@@ -54,6 +53,9 @@ set -a
 set +a
 PORT="${PORT:-8000}"
 BIND_HOST="${BIND_HOST:-127.0.0.1}"
+# Resolved after the environment file is sourced: the installer writes the
+# backend checkout to ARMPI_STUDIO_BACKEND_DIR, and that value must win.
+BACKEND_DIR="${ARMPI_STUDIO_BACKEND_DIR:-$REPO/../jcheng-studio/backend}"
 PYTHON="$BACKEND_DIR/.venv/bin/python"
 
 last_stuck_log=0

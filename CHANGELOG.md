@@ -15,12 +15,18 @@ All notable changes to this project are documented here. Format based on
 
 ### Changed
 
-- Studio watchdog defaults now target the successor `jcheng-studio` backend at
-  `~/jcheng/jcheng-studio/backend` instead of the frozen
+- Studio watchdog defaults now target the successor `jcheng-studio` backend
+  (the sibling checkout) instead of the frozen
   `jcheng-manipulation/armpi-debug-studio` checkout. The generated
   `studio.env` is read-only: `ARMPI_GATEWAY_URL` points at the reachable 8765
   gateway, `ARMPI_HARDWARE_MOTION=0`, and the pose takeover scope/ack are no
   longer written. A service unit must never enable motion.
+
+### Fixed
+
+- The watchdog resolves `ARMPI_STUDIO_BACKEND_DIR` after sourcing
+  `studio.env`, so the installed backend path is honored instead of being
+  overwritten by the script default.
 
 ## [0.1.0] — 2026-11-24
 

@@ -48,7 +48,9 @@ resolve_token() {
 TOKEN="$(resolve_token)"
 [[ -n "$TOKEN" ]] || { echo "ERROR: cannot find the gateway token; export ARMPI_GATEWAY_TOKEN" >&2; exit 1; }
 
-BACKEND_DIR="${ARMPI_STUDIO_BACKEND_DIR:-$HOME/jcheng/jcheng-studio/backend}"
+# Default to the sibling jcheng-studio checkout in the workspace; the
+# environment variable overrides it for a different layout.
+BACKEND_DIR="${ARMPI_STUDIO_BACKEND_DIR:-$(cd "$REPO/.." && pwd)/jcheng-studio/backend}"
 if [[ -x "$BACKEND_DIR/.venv/bin/python" ]]; then
     echo "backend: $BACKEND_DIR"
 else

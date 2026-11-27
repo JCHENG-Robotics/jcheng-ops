@@ -107,7 +107,7 @@ OOMScoreAdjust 在进程下一次 exec 时生效，因此安装后不重启单�
 | `ARMPI_OPS_TOKEN_FILE` | 巡检读取的网关令牌 | 两个已知路径依次尝试 |
 | `ARMPI_OPS_BIND` | 网关未配置时的探测地址 | `10.42.0.218` |
 | `ARMPI_STUDIO_ENV` | Studio 看护的环境文件 | `~/.config/armpi-studio/studio.env` |
-| `ARMPI_STUDIO_BACKEND_DIR` | 后端 checkout | `~/jcheng/jcheng-studio/backend` |
+| `ARMPI_STUDIO_BACKEND_DIR` | 后端 checkout | 同级 `jcheng-studio/backend` |
 | `ARMPI_STUDIO_INTERVAL` / `_FAIL_THRESHOLD` | 看护周期与阈值 | 30 s / 2 |
 | `ARMPI_STUDIO_LOG_DIR` | 看护日志 | `~/.local/state/armpi-studio` |
 
