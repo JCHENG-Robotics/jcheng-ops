@@ -8,6 +8,10 @@
 # enables it. The token is taken from ARMPI_GATEWAY_TOKEN if set, otherwise
 # from a running Studio backend, otherwise over SSH from the robot.
 #
+# The generated configuration is READ-ONLY: it points at the reachable 8765
+# gateway and sets ARMPI_HARDWARE_MOTION=0. A service unit must never enable
+# motion; an operator starts a motion-enabled console by hand, per session.
+#
 # Persistence across logout/reboot needs lingering, which needs sudo once:
 # the installer tries `sudo -n loginctl enable-linger` and prints the command
 # if that is not possible.
@@ -44,7 +48,9 @@ resolve_token() {
 TOKEN="$(resolve_token)"
 [[ -n "$TOKEN" ]] || { echo "ERROR: cannot find the gateway token; export ARMPI_GATEWAY_TOKEN" >&2; exit 1; }
 
-BACKEND_DIR="${ARMPI_STUDIO_BACKEND_DIR:-$HOME/jcheng/jcheng-manipulation/armpi-debug-studio/backend}"
+# Default to the sibling jcheng-studio checkout in the workspace; the
+# environment variable overrides it for a different layout.
+BACKEND_DIR="${ARMPI_STUDIO_BACKEND_DIR:-$(cd "$REPO/.." && pwd)/jcheng-studio/backend}"
 if [[ -x "$BACKEND_DIR/.venv/bin/python" ]]; then
     echo "backend: $BACKEND_DIR"
 else
@@ -61,14 +67,12 @@ cat > "$ENV_FILE" <<EOF
 # Regenerate with studio/install-studio-watchdog.sh.
 ARMPI_STUDIO_BACKEND_DIR=$BACKEND_DIR
 ARMPI_MODE=hardware
-ARMPI_HARDWARE_MOTION=1
-ARMPI_MOTION_SCOPE=pose
-ARMPI_TAKEOVER_ACK=I_AM_AT_THE_ROBOT_WITH_A_CLEAR_WORKSPACE
-ARMPI_GATEWAY_URL=http://$ROBOT_HOST:8766
+ARMPI_HARDWARE_MOTION=0
+ARMPI_GATEWAY_URL=http://$ROBOT_HOST:8765
 ARMPI_CAMERA_GATEWAY_URL=http://$ROBOT_HOST:8765
 ARMPI_GATEWAY_TOKEN=$TOKEN
 ARMPI_CAMERA_GATEWAY_TOKEN=$TOKEN
-DB_PATH=/tmp/armpi_studio_hardware_\$(date +%Y%m%d).db
+DB_PATH=$HOME/.local/state/armpi-studio/studio.db
 BIND_HOST=127.0.0.1
 PORT=$PORT
 EOF

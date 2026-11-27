@@ -89,9 +89,10 @@ sudo loginctl enable-linger "$USER"   # once; otherwise the watchdog stops at lo
 `install-studio-watchdog.sh` resolves the gateway token (in order:
 `ARMPI_GATEWAY_TOKEN`, the running backend environment, an SSH read of the
 robot token file) and writes `~/.config/armpi-studio/studio.env` (0600). The
-backend directory defaults to
-`~/jcheng/jcheng-manipulation/armpi-debug-studio/backend` and can be overridden
-with `ARMPI_STUDIO_BACKEND_DIR`.
+backend directory defaults to the sibling `jcheng-studio/backend` checkout and
+can be overridden with `ARMPI_STUDIO_BACKEND_DIR`. The generated configuration
+is **read-only**: it points at the reachable 8765 gateway and leaves
+`ARMPI_HARDWARE_MOTION` off, so the watchdog never enables motion.
 
 ## 4. Verification
 
