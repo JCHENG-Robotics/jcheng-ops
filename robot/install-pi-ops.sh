@@ -11,6 +11,9 @@
 #    pressure with the top resident processes.
 # 2. Restart policies: `armpi-gateway-pose` and `start_node` get
 #    Restart=always / on-failure so a crash does not need a manual start.
+#    `start_node` also waits for a stable `/dev/rrc`: the CH340 servo adapter
+#    can re-enumerate after boot, and the vendor controller exits on ENOENT
+#    while the ROS launch stays up (2026-11-27).
 # 3. OOM protection: sshd and both gateways get a negative OOMScoreAdjust so
 #    the next memory hog is killed instead of the operator's only way in.
 # 4. Hardware watchdog: systemd pings the BCM2835 watchdog and the board
@@ -69,6 +72,16 @@ OOMScoreAdjust=-300
 [Unit]
 StartLimitIntervalSec=300
 StartLimitBurst=5
+EOF
+cat > /etc/systemd/system/start_node.service.d/rrc-wait.conf <<'EOF'
+# 2026-11-27: the CH340 servo adapter re-enumerated ~50 s after boot, exactly
+# when ros_robot_controller opened /dev/rrc. The controller exited on ENOENT,
+# but the ROS launch stayed up, so Restart=on-failure never fired.
+# Wait until the resolved device has been unchanged for 15 s (max 90 s)
+# before launching. This only waits; it never opens the port and never
+# commands the arm.
+[Service]
+ExecStartPre=/bin/bash -c 'last=""; stable=0; for i in $(seq 1 90); do cur="$(readlink -f /dev/rrc 2>/dev/null || true)"; if [ -n "$cur" ] && [ "$cur" = "$last" ]; then stable=$((stable+1)); else stable=0; last="$cur"; fi; if [ "$stable" -ge 15 ]; then exit 0; fi; sleep 1; done; echo "WARN: /dev/rrc not stable after 90 s; starting anyway" >&2; exit 0'
 EOF
 cat > /etc/systemd/system/ssh.service.d/oom.conf <<'EOF'
 # sshd is the only remote way in; never let the OOM killer pick it first.

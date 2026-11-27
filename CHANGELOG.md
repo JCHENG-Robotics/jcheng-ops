@@ -13,6 +13,15 @@ All notable changes to this project are documented here. Format based on
   `motion_authority: none`, the three runtime roles and their forbidden
   actions, plus the verification record and the three open items.
 
+### Fixed
+
+- `install-pi-ops.sh` installs a `start_node` drop-in that waits for a stable
+  `/dev/rrc` before launching. The CH340 servo adapter can re-enumerate about
+  50 s after boot; the vendor controller opened the port during the gap,
+  exited with ENOENT, and the ROS launch stayed up, so `Restart=on-failure`
+  never fired (2026-11-27). The wait is state-based, opens no port and
+  commands no motion.
+
 ## [0.1.0] — 2026-11-24
 
 First version, extracted from the 2026-11-24 incident response.
