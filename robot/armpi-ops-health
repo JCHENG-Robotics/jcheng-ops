@@ -9,6 +9,13 @@ What it checks, per cycle:
 
 * both gateways (`armpi-gateway` on 8765, `armpi-gateway-pose` on 8766) answer
   `/health` within 4 s;
+* the read-only gateway's aux camera is fresh (`/aux-camera/status`:
+  `available` and `sample_age_ms` below `ARMPI_OPS_CAMERA_STALE_MS`). A wedged
+  camera subscription keeps `/health` at 200, so the probe above cannot see it
+  (2026-11-27: 15 minutes of stale frames with health OK). Only the read-only
+  gateway is restarted for this; the pose gateway is never restarted unattended,
+  and a stale-camera restart is rate-limited to one per
+  `ARMPI_OPS_CAMERA_COOLDOWN_S`;
 * the local sshd sends its `SSH-2.0` banner within 3 s (the 2026-11-24 wedge
   accepted TCP connections but never completed the banner exchange);
 * `MemAvailable` / `SwapFree` are not in the pressure zone, and if they are,
@@ -69,6 +76,17 @@ MEM_WARN_KB = 400_000
 SWAP_WARN_KB = 200_000
 HTTP_TIMEOUT_S = 4
 SSH_TIMEOUT_S = 3
+# A gateway can answer /health while its camera subscription is wedged: on
+# 2026-11-27 the read-only 8765 gateway reported aux_camera_ready=false with a
+# 15-minute-old frame while /health stayed 200, so the health loop never fired.
+# Only the read-only gateway is auto-restarted; the pose gateway (8766) can move
+# the arm and is never restarted unattended. A restart needs CAMERA_STALE_MS of
+# silence and is rate-limited, so an unplugged camera cannot bounce the service
+# every cycle.
+CAMERA_UNITS = ("armpi-gateway",)
+CAMERA_STALE_MS = int(os.environ.get("ARMPI_OPS_CAMERA_STALE_MS", "60000"))
+CAMERA_RESTART_COOLDOWN_S = int(os.environ.get("ARMPI_OPS_CAMERA_COOLDOWN_S", "900"))
+CAMERA_PATH = "/aux-camera/status"
 DRY_RUN = "--dry-run" in sys.argv[1:]
 IDLE_MOTION_STATES = {"idle", "disabled", None}
 
@@ -122,6 +140,36 @@ def http_health(unit: str, port: int, token: str | None) -> dict | None:
         return payload
     log(f"{unit} (port {port}): health probe failed: {last_error}")
     return None
+
+
+def http_json(unit: str, port: int, path: str, token: str | None) -> dict | None:
+    """GET ``path`` from the gateway, trying the bind address, then fallbacks."""
+    if not token:
+        return None
+    last_error: object = "no address tried"
+    for host in dict.fromkeys((gateway_bind(unit), DEFAULT_BIND, "127.0.0.1")):
+        request = urllib.request.Request(
+            f"http://{host}:{port}{path}", headers={TOKEN_HEADER: token}
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_S) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except (OSError, ValueError) as exc:
+            last_error = exc
+            continue
+        return payload if isinstance(payload, dict) else None
+    log(f"{unit} (port {port}): {path} probe failed: {last_error}")
+    return None
+
+
+def camera_stale(payload: dict | None) -> bool:
+    """True when the camera is unavailable or its newest frame is old enough."""
+    if payload is None:
+        return True
+    if not payload.get("available"):
+        return True
+    age = payload.get("sample_age_ms")
+    return age is not None and age > CAMERA_STALE_MS
 
 
 def motion_active(health: dict | None) -> bool:
@@ -229,7 +277,9 @@ def restart(unit: str, reason: str, actions: list[str]) -> None:
 def main() -> int:
     started_at = time.time()
     token = read_token()
-    failures = load_state().get("failures", {})
+    state = load_state()
+    failures = state.get("failures", {})
+    camera = state.get("camera", {})
     actions: list[str] = []
 
     memory = meminfo()
@@ -266,6 +316,35 @@ def main() -> int:
         restart(unit, f"{failures[unit]} consecutive health failures", actions)
         failures[unit] = 0
 
+    ports = dict(GATEWAYS)
+    for unit in CAMERA_UNITS:
+        if unit not in ports or gateway_health.get(unit) is None:
+            # A unit that is not configured here, or whose /health already
+            # failed, is handled by the loop above.
+            continue
+        streak = camera.setdefault(unit, {"stale": 0, "last_restart": 0.0})
+        if not camera_stale(http_json(unit, ports[unit], CAMERA_PATH, token)):
+            streak["stale"] = 0
+            continue
+        streak["stale"] = int(streak.get("stale", 0)) + 1
+        if streak["stale"] < FAIL_THRESHOLD:
+            continue
+        since = time.time() - float(streak.get("last_restart") or 0.0)
+        if since < CAMERA_RESTART_COOLDOWN_S:
+            log(
+                f"{unit} camera stale for {streak['stale']} probes but restarted "
+                f"{int(since)}s ago; not restarting again yet"
+            )
+            continue
+        other = [u for u, _ in GATEWAYS if u != unit][0]
+        if motion_active(gateway_health.get(other)):
+            log(f"{unit} camera stale but {other} reports motion active; not restarting")
+            actions.append(f"skipped restart of {unit}: motion active")
+            continue
+        restart(unit, f"aux camera stale for {streak['stale']} probes", actions)
+        streak["stale"] = 0
+        streak["last_restart"] = time.time()
+
     if ssh_banner_ok():
         failures["sshd"] = 0
     else:
@@ -292,6 +371,7 @@ def main() -> int:
             for unit, health in gateway_health.items()
         },
         "failures": failures,
+        "camera": camera,
         "actions": actions,
         "mem_available_mb": None if mem_available is None else mem_available // 1024,
         "swap_free_mb": None if swap_free is None else swap_free // 1024,
@@ -301,7 +381,7 @@ def main() -> int:
     state = load_state()
     if state.get("summary") != summary or actions:
         log(f"summary={summary} actions={actions or 'none'}")
-    state.update({"failures": failures, "summary": summary})
+    state.update({"failures": failures, "camera": camera, "summary": summary})
     save_json(STATE_PATH, state)
     return 0
 
