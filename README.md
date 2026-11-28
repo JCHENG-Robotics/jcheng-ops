@@ -6,8 +6,10 @@ Robot operations for JCHENG Robotics: unattended health checks, a hardware
 watchdog, service self-healing, the Studio watchdog on the operator laptop, and
 the incident runbook behind them.
 
-Target: **ArmPi Ultra** (Raspberry Pi 5 + vendor ROS 2 Humble stack) and the
-ArmPi Debug Studio on the operator laptop.
+Legacy target: **ArmPi Ultra** (Raspberry Pi 5 + vendor ROS 2 Humble stack) and
+the ArmPi Debug Studio on the operator laptop. The platform was **Frozen** on
+2026-11-28 (ADR-0007); these probes stay as a reference deployment and are not
+installed on new hosts.
 
 > Status: **Deployed** — v0.1.0 (2026-11-24). The four robot-side guards (15 s
 > hardware watchdog, 30 s health timer, restart policies, OOM protection) are

@@ -5,8 +5,9 @@
 JCHENG Robotics 的机器人运维仓库：无人值守健康巡检、硬件看门狗、服务自愈、
 操作员笔记本上的 Studio 看护，以及对应的事故手册。
 
-面向 **ArmPi Ultra**（Raspberry Pi 5 + 厂商 ROS 2 Humble 栈）和操作员笔记本上的
-ArmPi Debug Studio。
+遗留目标：**ArmPi Ultra**（Raspberry Pi 5 + 厂商 ROS 2 Humble 栈）和操作员笔记本
+上的 ArmPi Debug Studio。平台已于 2026-11-28 **冻结**（ADR-0007）；这些探针保留为
+参考部署，不再安装到新主机。
 
 > 状态：**已部署** — v0.1.0（2026-11-24）。机器人侧的四层防护（15 s 硬件看门狗、
 > 30 s 健康巡检、重启策略、OOM 保护）已安装并逐项验证；笔记本侧 Studio 看护已
